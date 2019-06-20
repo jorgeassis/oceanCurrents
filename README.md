@@ -1,32 +1,8 @@
-# ClimateData Processing V5.0
+# Ocean Currents V1.0
 
-R Pipelines for climate data request and processing.
+R pipelines to plot directionality and intensity of ocean currents as well as compute estimates of connectivity based on graph theory.
 Bears Studio, a toten of data sciences
 https://github.com/jorgeassis
-<br><br>
-
-### To Do List
-
-1. Resolve 3D climatologies
-
-### Data for the Present (baseline)
-
-```
-1. Full 3D interpolation with broad longitudinal bands
-2. Chunks of data by depth / number of cells
-```
-
-<br>
-
-### Data for the Past and Future Scenarios of change (climatology)
-
-```
-1. Reduce resolution of AOGCM data to a 3D gridded shape.
-2. Produce climatology as netcdf file
-3. Full 3D interpolation for final Layers with broad longitudinal bands
-4. Chunks of data by depth / number of cells
-```
-
 <br><br>
 
 ## Authors

@@ -1,89 +1,31 @@
 ## ---------------------------------------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------------------------------------
 ##
-## C.M.I.P. Data Processing 2.0
+## Ocean Currents
 ## Muffins 'n' Code
 ## https://github.com/jorgeassis
 ##
-## Python dependencies 
-## https://github.com/clstoulouse/motu-client-python#UsagePIP
-##
 ##
 ## ---------------------------------------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------------------------------------
-
-source("Dependencies/Functions.R")
-
-gc(reset=TRUE)
-
-n.clusters <- 4
-
-## --------------------------------------
-
-directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Present/Surface_HR/LongTerm"
-
-Meridional.Current <- list.files(directory,pattern="Sea.water.X.velocity",full.names = TRUE)
-Meridional.Current <- Meridional.Current[which(!grepl("Range", Meridional.Current))]
-Meridional.Current <- Meridional.Current[which(!grepl("Summary", Meridional.Current))]
-
-Zonal.Current <- list.files(directory,pattern="Sea.water.Y.velocity",full.names = TRUE)
-Zonal.Current <- Zonal.Current[which(!grepl("Range", Zonal.Current))]
-Zonal.Current <- Zonal.Current[which(!grepl("Summary", Zonal.Current))]
-
-length(Meridional.Current) == length(Zonal.Current)
-
-for(f in 1:length(Zonal.Current)) {
-  
-  Meridional.Current.t <- raster(Meridional.Current[f])
-  Zonal.Current.t <- raster(Zonal.Current[f])
-  
-  currents <- sqrt( (Meridional.Current.t^2) + (Zonal.Current.t^2) )
-  crs(currents) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-  
-  writeRaster(currents,filename=gsub(".X.",".",Meridional.Current[f]),format="GTiff",overwrite=T)
-  
-}
-
-## --------------------------------------
-
-# Produce Range
-
-Current.Velocity.min <- list.files(paste0(directory),pattern="Sea.water.velocity",full.names = TRUE)
-Current.Velocity.min <- Current.Velocity.min[grepl("Min.tif", Current.Velocity.min)]
-Current.Velocity.min <- Current.Velocity.min[!grepl("Lt", Current.Velocity.min)]
-
-Current.Velocity.max <- list.files(paste0(directory),pattern="Sea.water.velocity",full.names = TRUE)
-Current.Velocity.max <- Current.Velocity.max[grepl("Max.tif", Current.Velocity.max)]
-Current.Velocity.max <- Current.Velocity.max[!grepl("Lt", Current.Velocity.max)]
-
-for(i in 1:length(Current.Velocity.min)) {
-  
-  min <- raster(Current.Velocity.min[i]) ; names(min)
-  max <- raster(Current.Velocity.max[i]) ; names(max)
-  
-  name <- unlist(gregexpr("[.]",names(min)))
-  
-  Current.Velocity.abs.max <- calc(stack(max,min), function(x) { max(x[1],x[2]) } )
-  Current.Velocity.abs.min <- calc(stack(max,min), function(x) { min(x[1],x[2]) } )
-  
-  Current.Velocity.range <- Current.Velocity.abs.max - Current.Velocity.abs.min
-  crs(Current.Velocity.range) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-  
-  writeRaster(Current.Velocity.range,filename= gsub("Var.Min.tif","Var.Range.tif",Current.Velocity.min[i]) ,format="GTiff",overwrite=T)
-  
-}
-
-## --------------------------------------
-
-# Plot
 
 require(utils)
 require(colorRamps)
 require(ncdf4)
 require(raster)
 require(rasterVis) 
+library(rWind)
+library(gdistance)
+library(doParallel)
+
+source("mainFunctions.R")
+
+number.cores <- 8
 
 directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Present/Surface_HR/LongTerm"
+directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Past LGM/Surface/LongTerm"
+
+## --------------------------------------
 
 Meridional.Current <- list.files(directory,pattern="Sea.water.X.velocity",full.names = TRUE)
 Meridional.Current <- Meridional.Current[which(!grepl("Range", Meridional.Current))]
@@ -93,14 +35,18 @@ Zonal.Current <- list.files(directory,pattern="Sea.water.Y.velocity",full.names 
 Zonal.Current <- Zonal.Current[which(!grepl("Range", Zonal.Current))]
 Zonal.Current <- Zonal.Current[which(!grepl("Summary", Zonal.Current))]
 
-u9 <- raster(Meridional.Current[4])
-v9 <- raster(Zonal.Current[4])
+u <- raster(Meridional.Current[2])
+v <- raster(Zonal.Current[2])
 
-w <- brick(u9, v9)
+## -----------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------
+
+w <- brick(u, v)
 projection(w) <- CRS("+init=epsg:4326")
 
-xmin <- -180 ; xmax <- 180 ; ymax <- 0 ; ymin <- -80
-resolution <- 0.1
+# xmin <- -140 ; xmax <- -110 ; ymax <- 59 ; ymin <- 25
+# xmin <- -180 ; xmax <- 180 ; ymax <- 0 ; ymin <- -90
+resolution <- 0.05
 
 region.as.table <- matrix( NA ,nrow= ((ymax-ymin)/resolution) ,ncol= ((xmax-xmin)/resolution) )
 region.as.raster <- raster(region.as.table)
@@ -119,28 +65,209 @@ slope <- log(sqrt(w2hd[[1]]^2 + w2hd[[2]]^2)) + 9.02
 aspect <- atan2(w2hd[[1]], w2hd[[2]])
 vectorplot(w2hd * 10, isField = "dXY", region = slope, margin = FALSE, par.settings = rasterTheme(region = matlab.like(n = 20)),  narrows = 10000, at = seq(0,9.33,length.out=20))
 
-## --------------------------------------------------------------------------------
-## --------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------
 
-v9 <- crop(v9,extent(-20,20,20,50))
-u9 <- crop(u9,extent(-20,20,20,50))
+Meridional.Current
 
-direction <- 180 + 180 * atan2(v9,u9) / pi
+u <- raster(Meridional.Current[2])
+v <- raster(Zonal.Current[2])
+
+v <- crop(v,extent(region.as.raster))
+u <- crop(u,extent(region.as.raster))
+
+direction <- 180 + 180 * atan2(v,u) / pi
 direction[is.na(direction)] <- 0
-
-speed <- sqrt(v9^2 + u9^2)
+speed <- sqrt(v^2 + u^2)
 speed[is.na(speed)] <- 0
 
 currents <- stack(direction,speed)
 names(currents) <- c("wind.direction","wind.speed")
-Conductance <- flow.dispersion(currents, type ="active", fun=cost.FMGS) # cost.FMGS
+plot(currents)
 
-library(rWind)
-data(wind.data)
-wind <- wind2raster(wind.data)
-Conductance <- flow.dispersion(wind, type="passive")
+Conductance.min.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS) # cost.FMGS
+Conductance.mean.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS) # cost.FMGS
+Conductance.max.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS) # cost.FMGS
 
+Conductance.min.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) # cost.FMGS
+Conductance.mean.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) # cost.FMGS
+Conductance.max.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) # cost.FMGS
 
+## -----------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------
 
+# Isolation by distance (genetic data) vs. Conductance model
 
+genetic.diff.file <- "/Volumes/Jellyfish/Dropbox/Manuscripts/The Phylogeography of Macrocystis pyrifera/Data/Genetic/Fst Final Genetic Data 6L S.csv"
+genetic.coords.file <- "/Volumes/Jellyfish/Dropbox/Manuscripts/The Phylogeography of Macrocystis pyrifera/Data/Genetic/summary coords gis.csv" 
 
+genetic.diff <- read.csv(genetic.diff.file,sep=";",header=F)
+genetic.coords <- read.csv(genetic.coords.file,sep=";")
+genetic.coords <- genetic.coords[genetic.coords$Lat < 0,c(6,5)]
+
+nrow(genetic.coords)
+nrow(genetic.diff)
+
+## ---------------
+
+genetic.coords <- relocate.coordinates.na(genetic.coords,u,maximum.distance=25)
+nrow(genetic.coords)
+
+sites <- cellFromXY(u,genetic.coords)
+unique.sites <- unique(sites)
+
+if( length(sites) == length(unique.sites) ) { differentiation <- genetic.diff }
+
+if( length(sites) != length(unique.sites)) {
+  
+  differentiation <- matrix(NA,ncol=length(unique.sites),nrow=length(unique.sites))
+  
+  for( i in 1:length(unique.sites)) {
+    for( j in 1:length(unique.sites)) {
+      
+      pairs.i <- which( sites == unique.sites[i]  )
+      pairs.j <- which( sites == unique.sites[j]  )
+      differentiation[i,j] <- mean(unlist(genetic.diff[pairs.i,pairs.j]),na.rm=T)
+      
+    }  }
+
+  genetic.coords <- genetic.coords[-which(duplicated(sites)),]
+
+}
+
+diag(differentiation) <- NA
+
+## ---------------
+## IBD
+
+cost.surface <- u
+cost.surface[!is.na(cost.surface)] <- 1
+cost.surface[is.na(cost.surface)] <- 0
+plot(cost.surface,box=FALSE,legend=FALSE,col=c("black","white"))
+
+raster_tr <- transition(cost.surface, mean, directions=8)
+raster_tr_corrected <- geoCorrection(raster_tr, type="c", multpl=FALSE)
+
+plot(cost.surface,col=c("#A0CCF2","#737373"),box=FALSE,legend=FALSE)
+lines( shortestPath(raster_tr_corrected, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[20,]) , output="SpatialLines") )
+costDistance(raster_tr_corrected, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[20,]) )
+costDistance(Conductance.min.active, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[20,]) )
+
+## ---------------
+
+comb.all <- expand.grid(Pair.from=1:nrow(genetic.coords),Pair.to=1:nrow(genetic.coords))
+comb.all <- comb.all[comb.all$Pair.from != comb.all$Pair.to,]                 
+
+cl.2 <- makeCluster(3) # number.cores
+registerDoParallel(cl.2)
+
+results <- foreach(i=1:nrow(comb.all), .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+  
+  pair.from <- comb.all[i,1]
+  pair.to <- comb.all[i,2]
+  
+  results <- data.frame(pairFrom=pair.from, 
+                        pairTo=pair.to,
+                        geoDistance = as.numeric(costDistance(raster_tr_corrected, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        currentsDistance.min.active = as.numeric(costDistance(Conductance.min.active, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        currentsDistance.mean.active = as.numeric(costDistance(Conductance.mean.active, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        currentsDistance.max.active = as.numeric(costDistance(Conductance.max.active, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        # currentsDistance.min.passive = as.numeric(costDistance(Conductance.min.passive, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        # currentsDistance.mean.passive = as.numeric(costDistance(Conductance.mean.passive, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        # currentsDistance.max.passive = as.numeric(costDistance(Conductance.max.passive, as.matrix(genetic.coords[pair.from,]) , as.matrix(genetic.coords[pair.to,]) )),
+                        diff=differentiation[pair.from,pair.to])
+
+  gc(reset=TRUE)
+  
+  return( results )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2)
+
+results <- do.call("rbind",results)
+results[ results == Inf] <- NA
+
+# save(results,file = "ModelNorth.RData")
+# load(results,file = "ModelSouth.RData")
+
+## ---------------
+
+results[,4] <- sqrt(results [,4])
+results[,5] <- sqrt(results [,5])
+results[,6] <- sqrt(results [,6])
+results[,7] <- sqrt(results [,7])
+results[,8] <- sqrt(results [,8])
+results[,9] <- sqrt(results [,9])
+
+cor.ibd <- cor(results$geoDistance,results$diff , use = "complete.obs",method="pearson")
+fit.ibd <- lm(diff ~ geoDistance, data=results , na.action = na.omit)
+
+cor.min.active <- cor(results$currentsDistance.min.active,results$diff , use = "complete.obs",method="pearson")
+fit.min.active <- lm(diff ~ currentsDistance.min.active, data=results)
+
+cor.mean.active <- cor(results$currentsDistance.mean.active,results$diff , use = "complete.obs",method="pearson")
+fit.mean.active <- lm(diff ~ currentsDistance.mean.active, data=results , na.action = na.omit)
+
+cor.max.active <- cor(results$currentsDistance.max.active,results$diff , use = "complete.obs",method="pearson")
+fit.max.active <- lm(diff ~ currentsDistance.max.active, data=results)
+
+cor.min.passive <- cor(results$currentsDistance.min.passive,results$diff , use = "complete.obs",method="pearson")
+fit.min.passive <- lm(diff ~ currentsDistance.min.passive, data=results , na.action = na.omit)
+
+cor.mean.passive <- cor(results$currentsDistance.mean.passive,results$diff , use = "complete.obs",method="pearson")
+fit.mean.passive <- lm(diff ~ currentsDistance.mean.passive, data=results)
+
+cor.max.passive <- cor(results$currentsDistance.max.passive,results$diff , use = "complete.obs",method="pearson")
+fit.max.passive <- lm(diff ~ currentsDistance.max.passive, data=results , na.action = na.omit)
+
+data.frame(aic.ibd= AIC(fit.ibd),
+           cor.ibd = cor.ibd,
+           fit.min.active= AIC(fit.min.active),
+           cor.min.active = cor.min.active,
+           fit.mean.active= AIC(fit.mean.active),
+           cor.mean.active = cor.mean.active,
+           fit.max.active= AIC(fit.max.active),
+           cor.max.active = cor.max.active,
+           fit.min.passive= AIC(fit.min.passive),
+           cor.min.passive= cor.min.passive,
+           fit.mean.passive= AIC(fit.mean.passive),
+           cor.mean.passive = cor.mean.passive,
+           fit.max.passive= AIC(fit.max.passive),
+           cor.max.passive = cor.max.passive) 
+
+plot(results$geoDistance,results$diff,lty=1,col="#5E5E5E",ylab="",xlab="Marine distance (km)",axes=FALSE)
+axis(2,las=2,col="White",col.ticks="Black")
+axis(1,las=0,col="White",col.ticks="Black")
+box()
+title(ylab="Genetic differentiation",mgp=c(4,1,0)) 
+lines(seq(from=min(results$geoDistance),to=max(results$geoDistance),length.out=100),predict(fit.ibd, data.frame(geoDistance=seq(from=min(results$geoDistance),to=max(results$geoDistance),length.out=100) )),lty=2,col="#902828")
+
+plot(results$currentsDistance.mean.active,results$diff,lty=1,col="#5E5E5E",ylab="",xlab="-log(Min. probability)",axes=FALSE)
+axis(2,las=2,col="White",col.ticks="Black")
+axis(1,las=0,col="White",col.ticks="Black")
+box()
+title(ylab="Genetic differentiation",mgp=c(4,1,0)) 
+lines(seq(from=min(results$currentsDistance.mean.active,na.rm=T),to=max(results$currentsDistance.mean.active,na.rm=T),length.out=100),predict(fit.mean.active, data.frame(currentsDistance.mean.active=seq(from=min(results$currentsDistance.mean.active,na.rm=T),to=max(results$currentsDistance.mean.active,na.rm=T),length.out=100) )),lty=2,col="#902828")
+
+## ---------------
+
+r2.ibd = summary(fit.ibd)$adj.r.squared
+p.ibd=summary(fit.ibd)$coefficients
+p.ibd= ifelse( nrow(p.ibd) == 2 , p.ibd[2,4] , NA)
+
+r2.mean = summary(fit.mean)$adj.r.squared
+p.mean=summary(fit.mean)$coefficients
+p.mean= ifelse( nrow(p.mean) == 2 , p.mean[2,4] , NA)
+
+data.frame(aic.ibd= AIC(fit.ibd),
+           r2.ibd = r2.ibd,
+           cor.ibd = cor.ibd,
+           p.ibd=p.ibd,
+           aic.mean= AIC(fit.mean),
+           r2.mean = r2.mean,
+           cor.mean = cor.mean,
+           p.mean=p.mean) 
+
+## ---------------
+## ---------------
