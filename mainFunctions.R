@@ -1,4 +1,13 @@
 
+require(utils)
+require(colorRamps)
+require(ncdf4)
+require(raster)
+require(rasterVis) 
+library(rWind)
+library(gdistance)
+library(doParallel)
+
 relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
   
   set.seed(42)
