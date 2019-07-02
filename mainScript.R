@@ -308,7 +308,10 @@ for( i in 1:nrow(norm)) {
                                          Connectivity.min = min(c(results$currentsDistance.min.active[t.1],results$currentsDistance.mean.active[t.2])) ,
                                          Connectivity.mean = mean(c(results$currentsDistance.mean.active[t.1],results$currentsDistance.mean.active[t.2])) ,
                                          Connectivity.max = max(c(results$currentsDistance.max.active[t.1],results$currentsDistance.mean.active[t.2])) ,
-                                         thermalDistance = mean(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
+                                         
+                                         thermalDistance.min = min(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
+                                         thermalDistance.mean = mean(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
+                                         thermalDistance.max = max(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
                                          
                                          stringsAsFactors = FALSE ) )
   
@@ -327,7 +330,9 @@ fit.ibd <- lm(Differantiation ~ Distance, data=results.final , na.action = na.om
 fit.min.active <- lm(Differantiation ~ Connectivity.min, data=results.final , na.action = na.omit)
 fit.mean.active <- lm(Differantiation ~ Connectivity.mean, data=results.final , na.action = na.omit)
 fit.max.active <- lm(Differantiation ~ Connectivity.max, data=results.final , na.action = na.omit)
-fit.thermal <- lm(Differantiation ~ thermalDistance, data=results.final , na.action = na.omit)
+fit.thermal.min <- lm(Differantiation ~ thermalDistance.min, data=results.final , na.action = na.omit)
+fit.thermal.mean <- lm(Differantiation ~ thermalDistance.mean, data=results.final , na.action = na.omit)
+fit.thermal.max <- lm(Differantiation ~ thermalDistance.max, data=results.final , na.action = na.omit)
 
 data.frame(aic.ibd= AIC(fit.ibd),
            r2.fit.ibd = summary(fit.ibd)$adj.r.squared,
@@ -337,9 +342,12 @@ data.frame(aic.ibd= AIC(fit.ibd),
            r2.fit.mean.active = summary(fit.mean.active)$adj.r.squared,
            fit.max.active= AIC(fit.max.active),
            r2.fit.max.active = summary(fit.max.active)$adj.r.squared,
-           cor.thermal= AIC(fit.thermal),
-           r2.fit.thermal = summary(fit.thermal)$adj.r.squared
-           
+           cor.thermal.min= AIC(fit.thermal.min),
+           r2.fit.thermal.min = summary(fit.thermal.min)$adj.r.squared,
+           cor.thermal.mean= AIC(fit.thermal.mean),
+           r2.fit.thermal.mean = summary(fit.thermal.mean)$adj.r.squared,
+           cor.thermal.max= AIC(fit.thermal.max),
+           r2.fit.thermal.max = summary(fit.thermal.max)$adj.r.squared
            ) 
 
 plot(results.final$Distance/1000,results.final$Differantiation,lty=1,col="#5E5E5E",ylab="",xlab="Marine distance (km)",axes=FALSE)
@@ -365,7 +373,7 @@ lines(seq(from=min(results.final$thermalDistance,na.rm=T),to=max(results.final$t
 
 ## ---------------
 
-fit.mix <- lm(Differantiation ~ thermalDistance+Connectivity.min+Connectivity.mean+Connectivity.max+Distance, data=results.final)
+fit.mix <- lm(Differantiation ~ thermalDistance.mean+Connectivity.mean+Distance, data=results.final)
 step(fit.mix, direction = c("both"))
 
 fit.final <- lm(Differantiation ~ Connectivity.min+thermalDistance, data=results.final)
