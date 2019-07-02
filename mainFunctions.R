@@ -12,10 +12,11 @@ relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
   
   set.seed(42)
   
-  to.relocate <- which(is.na(raster::extract(rasters,coords[,1:2])) , arr.ind = TRUE)
+  to.relocate <- which(raster::extract(rasters,coords[,1:2]) == 0 , arr.ind = TRUE)
   coordinates.to.relocate <- coords[to.relocate,]
-  correct.points <- as.data.frame(subset(rasters,1),xy=TRUE,na.rm=TRUE)[,1:2]
-    
+  correct.points <- as.data.frame(subset(rasters,1),xy=TRUE)
+  correct.points <- correct.points[correct.points[,3] !=0,1:2]
+  
   if( nrow(coordinates.to.relocate) > 0 ) { 
     
     cat( paste0("Relocating ",length(to.relocate)," Points that were falling out of range"))
@@ -43,13 +44,10 @@ relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
     if( length(relocated) > 0) {
       
       near.cells <- correct.points[near.cells[relocated],]
-      old.presences <- coords[-to.relocate[relocated],]
+      coords[to.relocate[relocated],] <- near.cells
       
-      colnames(old.presences) <- c("Lon","Lat")
-      colnames(near.cells) <- c("Lon","Lat")
-      
-      occurrence.records <- rbind(old.presences[,c("Lon","Lat")],near.cells)
-      
+      colnames(coords) <- c("Lon","Lat")
+
     }
     
   }
@@ -58,20 +56,19 @@ relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
     
     cat( paste0("None to Relocate"))
     cat( paste0("\n"))
-    
   }
   
-    to.remove <- which(is.na(raster::extract(rasters,occurrence.records[,1:2])), arr.ind = TRUE)
+  to.remove <- which(raster::extract(rasters,coords[,1:2]) == 0, arr.ind = TRUE)
   
   if( length(to.remove) > 0) { 
     
-    occurrence.records <- occurrence.records[-to.remove,]
+    coords <- coords[-to.remove,]
     
   }
   
   ## -----------------------
   
-  return( occurrence.records )
+  return( coords )
   
 }
 
