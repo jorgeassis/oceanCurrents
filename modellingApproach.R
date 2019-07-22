@@ -20,9 +20,9 @@ directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate C
 
 ## --------------------------------------
 
-xmin <- 11 ; xmax <- 22 ; ymin <- -38 ; ymax <- -21 
+xmin <- -180 ; xmax <- 180 ; ymin <- -70  ; ymax <- 0
 
-resolution <- 0.01
+resolution <- 0.05
 
 region.as.table <- matrix( NA ,nrow= ((ymax-ymin)/resolution) ,ncol= ((xmax-xmin)/resolution) )
 region.as.raster <- raster(region.as.table)
@@ -45,8 +45,8 @@ Zonal.Current <- Zonal.Current[which(!grepl("Summary", Zonal.Current))]
 
 Meridional.Current
 
-u <- raster(Meridional.Current[2])
-v <- raster(Zonal.Current[2])
+u <- raster(Meridional.Current[4])
+v <- raster(Zonal.Current[4])
 
 v <- crop(v,extent(region.as.raster))
 u <- crop(u,extent(region.as.raster))
@@ -57,9 +57,9 @@ v <- resample(v,region.as.raster,method="bilinear")
 direction <- 180 + 180 * atan2(v,u) / pi
 speed <- sqrt(v^2 + u^2)
 
-# polar = CRS("+init=epsg:3031") # North Pole polar = CRS("+init=epsg:3995")
-# direction <- raster::projectRaster(direction, crs = polar, method = "ngb")
-# speed <- raster::projectRaster(speed, crs = polar, method = "ngb")
+polar = CRS("+init=epsg:3031") # North Pole polar = CRS("+init=epsg:3995")
+direction <- raster::projectRaster(direction, crs = polar, method = "ngb")
+speed <- raster::projectRaster(speed, crs = polar, method = "ngb")
 
 direction[is.na(direction)] <- 0
 speed[is.na(speed)] <- 0
@@ -70,22 +70,11 @@ plot(currents)
 
 ## ------------------
 
-Conductance.min.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS)
-Conductance.min.active <- geoCorrection(Conductance.min.active, type="c", multpl=FALSE)
-
 Conductance.mean.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS) 
 Conductance.mean.active <- geoCorrection(Conductance.mean.active, type="c", multpl=FALSE)
 
-Conductance.max.active <- flow.dispersion(currents, type ="active", fun=cost.FMGS)
-Conductance.max.active <- geoCorrection(Conductance.max.active, type="c", multpl=FALSE)
-
-# Conductance.min.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) 
-# Conductance.mean.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) 
-# Conductance.max.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) 
-# 
-# Conductance.min.passive <- geoCorrection(Conductance.min.passive, type="c", multpl=FALSE)
-# Conductance.mean.passive <- geoCorrection(Conductance.mean.passive, type="c", multpl=FALSE)
-# Conductance.max.passive <- geoCorrection(Conductance.max.passive, type="c", multpl=FALSE)
+Conductance.mean.passive <- flow.dispersion(currents, type ="passive", fun=cost.FMGS) 
+Conductance.mean.passive <- geoCorrection(Conductance.mean.passive, type="c", multpl=FALSE)
 
 ## ---------------------------------------------
 ## Distance
@@ -93,6 +82,8 @@ Conductance.max.active <- geoCorrection(Conductance.max.active, type="c", multpl
 cost.surface <- u
 cost.surface[!is.na(cost.surface)] <- 1
 cost.surface[is.na(cost.surface)] <- 0
+
+cost.surface <- raster::projectRaster(cost.surface, crs = polar, method = "ngb")
 
 Conductance.distance <- transition(cost.surface, mean, directions=8)
 Conductance.distance <- geoCorrection(Conductance.distance, type="c", multpl=FALSE)
@@ -103,46 +94,65 @@ Conductance.distance <- geoCorrection(Conductance.distance, type="c", multpl=FAL
 thermal <- raster("/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Present/Surface_HR/LongTerm/Ocean.temperature.Surface.Var.Lt.Max.tif")
 thermal <- crop(thermal,extent(region.as.raster))
 thermal <- resample(thermal,region.as.raster,method="bilinear")
-
-speed <- ( 1 / ( thermal / max(getValues(thermal),na.rm=TRUE)) - 1)
-speed[is.na(speed)] <- 0
+thermal <- thermal - min(getValues(thermal),na.rm=TRUE)
+thermal <- thermal / max(getValues(thermal),na.rm=TRUE)
 
 direction <- terrain(thermal, opt=c('flowdir'), unit='degrees')
-direction[is.na(direction)] <- 0
+speed <- terrain(thermal, opt=c('slope'), unit='degrees')
+
+direction <- raster::projectRaster(direction, crs = polar, method = "ngb")
+speed <- raster::projectRaster(speed, crs = polar, method = "ngb")
 
 plot(speed)
 plot(direction)
 
-thermal <- stack(direction,speed)
-names(thermal) <- c("wind.direction","wind.speed")
+speed[is.na(speed)] <- 0
+direction[is.na(direction)] <- 0
 
-Conductance.thermal <- flow.dispersion(thermal, type ="active", fun=cost.FMGS)
-Conductance.thermal <- geoCorrection(Conductance.thermal, type="c", multpl=FALSE)
+thermalFlow <- stack(direction,speed)
+names(thermalFlow) <- c("wind.direction","wind.speed")
+
+ConductanceThermalA <- flow.dispersion(thermalFlow, type ="active", fun=cost.FMGS)
+ConductanceThermalA <- geoCorrection(ConductanceThermalA, type="c", multpl=FALSE)
+
+ConductanceThermalP <- flow.dispersion(thermalFlow, type ="passive", fun=cost.FMGS)
+ConductanceThermalP <- geoCorrection(ConductanceThermalP, type="c", multpl=FALSE)
 
 ## -----------------------------------------------------------------------------------
 ## -----------------------------------------------------------------------------------
 
 # Isolation by distance (genetic data) vs. Conductance model
 
-project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Drivers of population genetic structurue in Laminaria pallida/Transport Simulation in South Africa/"
+project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/The Phylogeography of Macrocystis pyrifera/Data/Genetic/"
 
-genetic.coords.file <- paste0(project.folder,"/Data/Differentiation/Coords.csv")
-genetic.diff.file <- paste0(project.folder,"/Data/Differentiation/FST.csv")
+genetic.coords.file <- paste0(project.folder,"/summary coords gis.csv")
+genetic.diff.file <- paste0(project.folder,"/Fst Final Genetic Data 6L S.csv")
 
-genetic.coords <- read.csv(genetic.coords.file,sep=";")[,2:3]
-differentiation <- read.csv(genetic.diff.file,sep=";",header=T)[,-1]
-
-differentiation[upper.tri(differentiation)] <- t(differentiation)[upper.tri(differentiation)]
+genetic.coords <- read.csv(genetic.coords.file,sep=";")[,5:6]
+genetic.coords <- genetic.coords[genetic.coords$Lat < 0,]
+differentiation <- read.csv(genetic.diff.file,sep=";",header=F)
 
 nrow(genetic.coords)
 nrow(differentiation)
+
+## ---------------------------------------------------------
+
+coordinates(genetic.coords) <- ~Lon+Lat
+crs(genetic.coords) <- CRS("+proj=longlat +datum=WGS84")
+summary(genetic.coords)
+ 
+genetic.coords <- spTransform(genetic.coords, crs(polar))
+summary(genetic.coords)
+genetic.coords <- as.data.frame(genetic.coords)
+
+## ---------------------------------------------------------
 
 plot(cost.surface,col=c("#A0CCF2","#737373"),box=FALSE,legend=FALSE)
 points(genetic.coords)
 
 ## ---------------------------------------------------------
 
-genetic.coords <- relocate.coordinates.na(genetic.coords,cost.surface,maximum.distance=50)
+genetic.coords <- relocate.coordinates.na(genetic.coords,cost.surface,maximum.distance=500000)
 nrow(genetic.coords)
 
 sites <- cellFromXY(cost.surface,genetic.coords)
@@ -175,19 +185,13 @@ plot(cost.surface,col=c("white","#75C2D3"))
 points(genetic.coords,col="#565656",pch=19)
 lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
 
-## ---------------------------------------------------------
+plot(cost.surface,col=c("white","#75C2D3"))
+points(genetic.coords,col="#565656",pch=19)
+lines( shortestPath(Conductance.mean.passive, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
 
-# coordinates(genetic.coords) <- ~Lon+Lat
-# crs(genetic.coords) <- CRS("+proj=longlat +datum=WGS84")
-# summary(genetic.coords)
-# 
-# genetic.coords <- spTransform(genetic.coords, crs(polar))
-# summary(genetic.coords)
-# 
-# plot(direction)
-# points(genetic.coords)
-# 
-# genetic.coords <- as.data.frame(genetic.coords)
+plot(cost.surface,col=c("white","#75C2D3"))
+points(genetic.coords,col="#565656",pch=19)
+lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
 
 ## ---------------
 
@@ -213,7 +217,7 @@ registerDoParallel(cl.2)
 results.geoDistance <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
 
   res <- as.numeric(costDistance(Conductance.distance, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))
-  if(res == 0) { res <- spDistsN1( as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) , longlat=TRUE) * 1000 }
+  if(res == 0) { res <- spDistsN1( as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) , longlat=FALSE) }
   return( res )
   
 }
@@ -225,34 +229,7 @@ stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 cl.2 <- makeCluster(number.cores)
 registerDoParallel(cl.2)
 
-results.currentsDistance.min.active <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
-  
-  return( as.numeric(costDistance(Conductance.min.active, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
-  
-}
-
-stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
-
-
-## ---------------
-
-cl.2 <- makeCluster(number.cores)
-registerDoParallel(cl.2)
-
-results.currentsDistance.max.active <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
-  
-  return( as.numeric(costDistance(Conductance.max.active, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
-  
-}
-
-stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
-
-## ---------------
-
-cl.2 <- makeCluster(number.cores)
-registerDoParallel(cl.2)
-
-results.currentsDistance.mean.active <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+results.currentsDistance.active <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
   
   return( as.numeric(costDistance(Conductance.mean.active, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
   
@@ -260,15 +237,41 @@ results.currentsDistance.mean.active <- foreach(i=1:nrow(comb.all), .combine=c ,
 
 stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 
+## ---------------
+
+cl.2 <- makeCluster(number.cores)
+registerDoParallel(cl.2)
+
+results.currentsDistance.passive <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+  
+  return( as.numeric(costDistance(Conductance.mean.passive, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 
 ## ---------------
 
 cl.2 <- makeCluster(number.cores)
 registerDoParallel(cl.2)
 
-results.thermalDistance <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+results.thermalDistance.active <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
   
-  return( as.numeric(costDistance(Conductance.thermal, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
+  return( as.numeric(costDistance(ConductanceThermalA, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
+
+
+## ---------------
+
+cl.2 <- makeCluster(number.cores)
+registerDoParallel(cl.2)
+
+results.thermalDistance.passive <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+  
+  return( as.numeric(costDistance(ConductanceThermalP, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) ))  )
   
 }
 

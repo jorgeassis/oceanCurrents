@@ -15,7 +15,8 @@ relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
   to.relocate <- which(raster::extract(rasters,coords[,1:2]) == 0 , arr.ind = TRUE)
   coordinates.to.relocate <- coords[to.relocate,]
   correct.points <- as.data.frame(subset(rasters,1),xy=TRUE)
-  correct.points <- correct.points[correct.points[,3] !=0,1:2]
+  correct.points <- correct.points[ !is.na(correct.points[,3]),]
+  correct.points <- correct.points[correct.points[,3] == 1 ,1:2]
   
   if( nrow(coordinates.to.relocate) > 0 ) { 
     
@@ -26,7 +27,7 @@ relocate.coordinates.na <- function(coords,rasters,maximum.distance) {
     
     for(p in 1:nrow(coordinates.to.relocate)) {
       
-      near.cell.p <- spDistsN1( as.matrix(correct.points), as.matrix(coordinates.to.relocate[p,1:2]),longlat=TRUE)
+      near.cell.p <- spDistsN1( as.matrix(correct.points), as.matrix(coordinates.to.relocate[p,1:2]),longlat=FALSE)
       
       if( near.cell.p[which.min(near.cell.p)] <= maximum.distance ) {
         
