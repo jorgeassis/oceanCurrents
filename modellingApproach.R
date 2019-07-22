@@ -20,9 +20,9 @@ directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate C
 
 ## --------------------------------------
 
-xmin <- -180 ; xmax <- 180 ; ymin <- -70  ; ymax <- 0
+xmin <- -180 ; xmax <- 180 ; ymin <- -75  ; ymax <- -10
 
-resolution <- 0.05
+resolution <- 0.25
 
 region.as.table <- matrix( NA ,nrow= ((ymax-ymin)/resolution) ,ncol= ((xmax-xmin)/resolution) )
 region.as.raster <- raster(region.as.table)
@@ -57,9 +57,11 @@ v <- resample(v,region.as.raster,method="bilinear")
 direction <- 180 + 180 * atan2(v,u) / pi
 speed <- sqrt(v^2 + u^2)
 
-polar = CRS("+init=epsg:3031") # North Pole polar = CRS("+init=epsg:3995")
-direction <- raster::projectRaster(direction, crs = polar, method = "ngb")
-speed <- raster::projectRaster(speed, crs = polar, method = "ngb")
+polar.1 <- CRS("+init=epsg:3031") # North Pole polar = CRS("+init=epsg:3995")
+polar.2 <- CRS("+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
+
+direction <- raster::projectRaster(direction, crs = polar.2, method = "ngb")
+speed <- raster::projectRaster(speed, crs = polar.2, method = "ngb")
 
 direction[is.na(direction)] <- 0
 speed[is.na(speed)] <- 0
@@ -83,7 +85,7 @@ cost.surface <- u
 cost.surface[!is.na(cost.surface)] <- 1
 cost.surface[is.na(cost.surface)] <- 0
 
-cost.surface <- raster::projectRaster(cost.surface, crs = polar, method = "ngb")
+cost.surface <- raster::projectRaster(cost.surface, crs = polar.2, method = "ngb")
 
 Conductance.distance <- transition(cost.surface, mean, directions=8)
 Conductance.distance <- geoCorrection(Conductance.distance, type="c", multpl=FALSE)
@@ -97,17 +99,17 @@ thermal <- resample(thermal,region.as.raster,method="bilinear")
 thermal <- thermal - min(getValues(thermal),na.rm=TRUE)
 thermal <- thermal / max(getValues(thermal),na.rm=TRUE)
 
-direction <- terrain(thermal, opt=c('flowdir'), unit='degrees')
+direction <- terrain(thermal, opt=c('aspect'), unit='degrees')
 speed <- terrain(thermal, opt=c('slope'), unit='degrees')
 
-direction <- raster::projectRaster(direction, crs = polar, method = "ngb")
-speed <- raster::projectRaster(speed, crs = polar, method = "ngb")
-
-plot(speed)
-plot(direction)
+direction <- raster::projectRaster(direction, crs = polar.2, method = "ngb")
+speed <- raster::projectRaster(speed, crs = polar.2, method = "ngb")
 
 speed[is.na(speed)] <- 0
 direction[is.na(direction)] <- 0
+
+plot(speed)
+plot(direction)
 
 thermalFlow <- stack(direction,speed)
 names(thermalFlow) <- c("wind.direction","wind.speed")
@@ -141,7 +143,7 @@ coordinates(genetic.coords) <- ~Lon+Lat
 crs(genetic.coords) <- CRS("+proj=longlat +datum=WGS84")
 summary(genetic.coords)
  
-genetic.coords <- spTransform(genetic.coords, crs(polar))
+genetic.coords <- spTransform(genetic.coords, crs(polar.1))
 summary(genetic.coords)
 genetic.coords <- as.data.frame(genetic.coords)
 
@@ -152,13 +154,11 @@ points(genetic.coords)
 
 ## ---------------------------------------------------------
 
-genetic.coords <- relocate.coordinates.na(genetic.coords,cost.surface,maximum.distance=500000)
+genetic.coords <- relocate.coordinates.na(genetic.coords,cost.surface,maximum.distance=Inf)
 nrow(genetic.coords)
 
 sites <- cellFromXY(cost.surface,genetic.coords)
 unique.sites <- unique(sites)
-
-if( length(sites) == length(unique.sites) ) { differentiation <- genetic.diff }
 
 if( length(sites) != length(unique.sites)) {
   
@@ -183,15 +183,19 @@ diag(differentiation) <- NA
 
 plot(cost.surface,col=c("white","#75C2D3"))
 points(genetic.coords,col="#565656",pch=19)
+
 lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
+lines( shortestPath(Conductance.distance, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
 points(genetic.coords,col="#565656",pch=19)
-lines( shortestPath(Conductance.mean.passive, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
+lines( shortestPath(Conductance.mean.passive, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[14,]) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
 points(genetic.coords,col="#565656",pch=19)
 lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
+lines( shortestPath(Conductance.mean.active, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
+lines( shortestPath(Conductance.mean.passive, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
 
 ## ---------------
 
@@ -263,7 +267,6 @@ results.thermalDistance.active <- foreach(i=1:nrow(comb.all), .combine=c , .verb
 
 stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 
-
 ## ---------------
 
 cl.2 <- makeCluster(number.cores)
@@ -280,11 +283,11 @@ stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 ## -------------------------------------------
 
 results <- data.frame(comb.all,
-                      thermalDistance=results.thermalDistance,
                       geoDistance=results.geoDistance,
-                      currentsDistance.min.active=results.currentsDistance.min.active,
-                      currentsDistance.mean.active=results.currentsDistance.mean.active,
-                      currentsDistance.max.active=results.currentsDistance.max.active,
+                      thermalDistance.active=results.thermalDistance.active,
+                      thermalDistance.passive=results.thermalDistance.passive,
+                      currentsDistance.active=results.currentsDistance.active,
+                      currentsDistance.passive=results.currentsDistance.passive,
                       diff=results.diff)
 
 results[results == Inf] <- NA
@@ -308,13 +311,21 @@ for( i in 1:nrow(norm)) {
                                          Differantiation = as.numeric(as.character(results$diff[t.1])),
                                          Distance = results$geoDistance[t.1],
                                          
-                                         Connectivity.min = min(c(results$currentsDistance.min.active[t.1],results$currentsDistance.mean.active[t.2])) ,
-                                         Connectivity.mean = mean(c(results$currentsDistance.mean.active[t.1],results$currentsDistance.mean.active[t.2])) ,
-                                         Connectivity.max = max(c(results$currentsDistance.max.active[t.1],results$currentsDistance.mean.active[t.2])) ,
+                                         Connectivity.min.passive = min(c(results$currentsDistance.passive[t.1],results$currentsDistance.passive[t.2]),na.rm=T) ,
+                                         Connectivity.mean.passive = mean(c(results$currentsDistance.passive[t.1],results$currentsDistance.passive[t.2]),na.rm=T) ,
+                                         Connectivity.max.passive = max(c(results$currentsDistance.passive[t.1],results$currentsDistance.passive[t.2]),na.rm=T) ,
                                          
-                                         thermalDistance.min = min(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
-                                         thermalDistance.mean = mean(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
-                                         thermalDistance.max = max(c(results$thermalDistance[t.1],results$thermalDistance[t.2]),na.rm=T) ,
+                                         thermalDistance.min.passive = min(c(results$thermalDistance.passive[t.1],results$thermalDistance.passive[t.2]),na.rm=T) ,
+                                         thermalDistance.mean.passive = mean(c(results$thermalDistance.passive[t.1],results$thermalDistance.passive[t.2]),na.rm=T) ,
+                                         thermalDistance.max.passive = max(c(results$thermalDistance.passive[t.1],results$thermalDistance.passive[t.2]),na.rm=T) ,
+                                         
+                                         Connectivity.min.active = min(c(results$currentsDistance.active[t.1],results$currentsDistance.active[t.2]),na.rm=T) ,
+                                         Connectivity.mean.active = mean(c(results$currentsDistance.active[t.1],results$currentsDistance.active[t.2]),na.rm=T) ,
+                                         Connectivity.max.active = max(c(results$currentsDistance.active[t.1],results$currentsDistance.active[t.2]),na.rm=T) ,
+                                         
+                                         thermalDistance.min.active = min(c(results$thermalDistance.active[t.1],results$thermalDistance.active[t.2]),na.rm=T) ,
+                                         thermalDistance.mean.active = mean(c(results$thermalDistance.active[t.1],results$thermalDistance.active[t.2]),na.rm=T) ,
+                                         thermalDistance.max.active = max(c(results$thermalDistance.active[t.1],results$thermalDistance.active[t.2]),na.rm=T) ,
                                          
                                          stringsAsFactors = FALSE ) )
   
@@ -324,6 +335,8 @@ for( i in 1:nrow(norm)) {
 
 results.final[,3] <- results.final [,3] / (1 - results.final [,3])
 results.final[results.final[,3] < 0,3] <- 0
+
+results.final <- results.final[complete.cases(results.final),]
 
 results.final[,5] <- sqrt(results.final [,5])
 results.final[,6] <- sqrt(results.final[,6] )
