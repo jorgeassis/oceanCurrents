@@ -129,6 +129,7 @@ project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/The Phylogeography of 
 
 genetic.coords.file <- paste0(project.folder,"/summary coords gis.csv")
 genetic.diff.file <- paste0(project.folder,"/Fst Final Genetic Data 6L S.csv")
+genetic.diff.file <- paste0(project.folder,"/JostD Final Genetic Data 6L S.csv")
 
 genetic.coords <- read.csv(genetic.coords.file,sep=";")[,5:6]
 genetic.coords <- genetic.coords[genetic.coords$Lat < 0,]
