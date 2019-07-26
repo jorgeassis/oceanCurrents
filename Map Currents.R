@@ -20,9 +20,8 @@ directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate C
 
 xmin <- -175 ; xmax <- -104.75 ; ymin <- 20  ; ymax <- 62.5
 xmin <- -180 ; xmax <- 180 ; ymin <- -70  ; ymax <- 0
-xmin <- -180 ; xmax <- 180 ; ymin <- -75  ; ymax <- 90
-
-resolution <- 0.05
+xmin <- -6.5 ; xmax <- 2.6 ; ymin <- 46.32  ; ymax <- 51.9
+resolution <- 0.01
 
 region.as.table <- matrix( NA ,nrow= ((ymax-ymin)/resolution) ,ncol= ((xmax-xmin)/resolution) )
 region.as.raster <- raster(region.as.table)
@@ -73,8 +72,8 @@ w2hd <- brick(w2hd.1, w2hd.2)
 
 slope <- sqrt((w2hd[[1]]*10)^2 + (w2hd[[2]]*10)^2)
 aspect <- atan2(w2hd[[1]]*10, w2hd[[2]]*10)
-vectorplot(w2hd * 10, isField = "dXY", region = slope/10, margin = FALSE, par.settings = rasterTheme(region = matlab.like(n = 10)), 
-           narrows = 10000, at = seq(min(getValues(slope),na.rm=T)/10,max(getValues(slope),na.rm=T)/10,length.out=10), col.arrows='white')
+vectorplot(w2hd * 10, isField = "dXY", region = slope/10, margin = FALSE, par.settings = rasterTheme(region = matlab.like(n = 100)), 
+           narrows = 5000, at = seq(min(getValues(slope),na.rm=T)/10,max(getValues(slope),na.rm=T)/10,length.out=100), col.arrows='white')
 
 ## -----------------------------------------------------------------------------------
 ## -----------------------------------------------------------------------------------

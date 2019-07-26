@@ -20,9 +20,8 @@ directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate C
 
 ## --------------------------------------
 
-xmin <- -180 ; xmax <- 180 ; ymin <- -75  ; ymax <- -10
-
-resolution <- 0.25
+xmin <- -6.5 ; xmax <- 2.6 ; ymin <- 46.32  ; ymax <- 51.9
+resolution <- 0.005
 
 region.as.table <- matrix( NA ,nrow= ((ymax-ymin)/resolution) ,ncol= ((xmax-xmin)/resolution) )
 region.as.raster <- raster(region.as.table)
@@ -57,11 +56,14 @@ v <- resample(v,region.as.raster,method="bilinear")
 direction <- 180 + 180 * atan2(v,u) / pi
 speed <- sqrt(v^2 + u^2)
 
+## ------------------
+
 polar.1 <- CRS("+init=epsg:3031") # North Pole polar = CRS("+init=epsg:3995")
 polar.2 <- CRS("+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
-
 direction <- raster::projectRaster(direction, crs = polar.2, method = "ngb")
 speed <- raster::projectRaster(speed, crs = polar.2, method = "ngb")
+
+## ------------------
 
 direction[is.na(direction)] <- 0
 speed[is.na(speed)] <- 0
@@ -125,15 +127,15 @@ ConductanceThermalP <- geoCorrection(ConductanceThermalP, type="c", multpl=FALSE
 
 # Isolation by distance (genetic data) vs. Conductance model
 
-project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/The Phylogeography of Macrocystis pyrifera/Data/Genetic/"
+project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Genetic differentiation of Laminaria digitata across Brittany/Data/"
 
-genetic.coords.file <- paste0(project.folder,"/summary coords gis.csv")
-genetic.diff.file <- paste0(project.folder,"/Fst Final Genetic Data 6L S.csv")
-genetic.diff.file <- paste0(project.folder,"/JostD Final Genetic Data 6L S.csv")
+genetic.coords.file <- paste0(project.folder,"/ID#0_Coords.txt")
+genetic.diff.file <- paste0(project.folder,"/ID#0_FST.txt")
 
-genetic.coords <- read.csv(genetic.coords.file,sep=";")[,5:6]
-genetic.coords <- genetic.coords[genetic.coords$Lat < 0,]
-differentiation <- read.csv(genetic.diff.file,sep=";",header=F)
+genetic.coords <- read.csv(genetic.coords.file,sep=";")[,2:3]
+genetic.coords.names <- read.csv(genetic.coords.file,sep=";",stringsAsFactors = F)[,1]
+differentiation <- read.csv(genetic.diff.file,sep=";",header=F)[-1,-1]
+differentiation[upper.tri(differentiation)] <- t(differentiation)[upper.tri(differentiation)]
 
 nrow(genetic.coords)
 nrow(differentiation)
@@ -161,7 +163,7 @@ nrow(genetic.coords)
 sites <- cellFromXY(cost.surface,genetic.coords)
 unique.sites <- unique(sites)
 
-if( length(sites) != length(unique.sites)) {
+if( length(sites) != length(unique.sites) )  {
   
   differentiation.i <- matrix(NA,ncol=length(unique.sites),nrow=length(unique.sites))
   
@@ -176,6 +178,7 @@ if( length(sites) != length(unique.sites)) {
     }  }
 
   genetic.coords <- genetic.coords[-which(duplicated(sites)),]
+  genetic.coords.names <- genetic.coords.names[-which(duplicated(sites)),]
   differentiation <- differentiation.i
   
 }
@@ -183,17 +186,15 @@ if( length(sites) != length(unique.sites)) {
 diag(differentiation) <- NA
 
 plot(cost.surface,col=c("white","#75C2D3"))
-points(genetic.coords,col="#565656",pch=19)
-
-lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
-lines( shortestPath(Conductance.distance, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
+points(genetic.coords[c(4,22),],col="#565656",pch=19)
+lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[2,]) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
-points(genetic.coords,col="#565656",pch=19)
-lines( shortestPath(Conductance.mean.passive, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[14,]) , output="SpatialLines") )
+points(genetic.coords[c(4,22),],col="#565656",pch=19)
+lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[4,]) , as.matrix(genetic.coords[22,]) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
-points(genetic.coords,col="#565656",pch=19)
+points(genetic.coords[c(4,22),],col="#565656",pch=19)
 lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[13,]) , output="SpatialLines") )
 lines( shortestPath(Conductance.mean.active, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
 lines( shortestPath(Conductance.mean.passive, matrix(c(-5000000,-5e+06),ncol=2) , matrix(c(100000,-5e+06),ncol=2) , output="SpatialLines") )
@@ -283,16 +284,40 @@ stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 
 ## -------------------------------------------
 
+rocky <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Genetic differentiation of Laminaria digitata across Brittany/Data/Rocky.tif"
+rocky <- raster(rocky)
+
+cl.2 <- makeCluster(number.cores)
+registerDoParallel(cl.2)
+
+habitat.continuity <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+
+  line.r <- shortestPath(Conductance.distance, as.matrix(genetic.coords[comb.all[i,1],]) , as.matrix(genetic.coords[comb.all[i,2],]) , output="SpatialLines")
+  result.t <- rocky[unlist(cellFromLine(rocky, line.r))]
+  return( sum(result.t == 1,na.rm=T) /length(result.t) )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
+
+## -------------------------------------------
+
 results <- data.frame(comb.all,
                       geoDistance=results.geoDistance,
                       thermalDistance.active=results.thermalDistance.active,
                       thermalDistance.passive=results.thermalDistance.passive,
                       currentsDistance.active=results.currentsDistance.active,
                       currentsDistance.passive=results.currentsDistance.passive,
+                      habitatContinuity = habitat.continuity,
                       diff=results.diff)
 
 results[results == Inf] <- NA
 head(results)
+
+results[,1] <- genetic.coords.names[results[,1]]
+results[,2] <- genetic.coords.names[results[,2]]
+
+write.csv(results,file="../Metrix2.csv",quote = FALSE,row.names = FALSE)
 
 ## ----------------
 
