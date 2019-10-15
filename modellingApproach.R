@@ -14,9 +14,9 @@ gc(reset=TRUE)
 
 source("mainFunctions.R")
 
-number.cores <- 16
+number.cores <- 8
 
-directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Present/Surface_HR/LongTerm"
+directory <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers HR/Present/Surface/LongTerm PerSeason"
 
 ## --------------------------------------
 
@@ -95,7 +95,7 @@ Conductance.distance <- geoCorrection(Conductance.distance, type="c", multpl=FAL
 ## ---------------------------------------------
 # Thermal
 
-thermal <- raster("/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers/Present/Surface_HR/LongTerm/Ocean.temperature.Surface.Var.Lt.Max.tif")
+thermal <- raster("/Volumes/Jellyfish/Dropbox/Manuscripts/Bio-ORACLE Across Climate Changes/Bioclimatic Layers HR/Present/Surface/LongTerm/Ocean.temperature.Surface.Var.Lt.Max.tif")
 thermal <- crop(thermal,extent(region.as.raster))
 thermal <- resample(thermal,region.as.raster,method="bilinear")
 thermal <- thermal - min(getValues(thermal),na.rm=TRUE)
@@ -104,8 +104,8 @@ thermal <- thermal / max(getValues(thermal),na.rm=TRUE)
 direction <- terrain(thermal, opt=c('aspect'), unit='degrees')
 speed <- terrain(thermal, opt=c('slope'), unit='degrees')
 
-direction <- raster::projectRaster(direction, crs = polar.2, method = "ngb")
-speed <- raster::projectRaster(speed, crs = polar.2, method = "ngb")
+# direction <- raster::projectRaster(direction, crs = polar.2, method = "ngb")
+# speed <- raster::projectRaster(speed, crs = polar.2, method = "ngb")
 
 speed[is.na(speed)] <- 0
 direction[is.na(direction)] <- 0
@@ -115,6 +115,7 @@ plot(direction)
 
 thermalFlow <- stack(direction,speed)
 names(thermalFlow) <- c("wind.direction","wind.speed")
+plot(thermalFlow)
 
 ConductanceThermalA <- flow.dispersion(thermalFlow, type ="active", fun=cost.FMGS)
 ConductanceThermalA <- geoCorrection(ConductanceThermalA, type="c", multpl=FALSE)
@@ -129,26 +130,30 @@ ConductanceThermalP <- geoCorrection(ConductanceThermalP, type="c", multpl=FALSE
 
 project.folder <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Genetic differentiation of Laminaria digitata across Brittany/Data/"
 
-genetic.coords.file <- paste0(project.folder,"/ID#0_Coords.txt")
-genetic.diff.file <- paste0(project.folder,"/ID#0_FST.txt")
+genetic.coords.file <- paste0(project.folder,"/39popFinal.csv")
+genetic.diff.file <- paste0(project.folder,"/fst.csv")
+genetic.diff.file2 <- paste0(project.folder,"/nei.csv")
+genetic.diff.file3 <- paste0(project.folder,"/migration.csv")
 
-genetic.coords <- read.csv(genetic.coords.file,sep=";")[,2:3]
-genetic.coords.names <- read.csv(genetic.coords.file,sep=";",stringsAsFactors = F)[,1]
-differentiation <- read.csv(genetic.diff.file,sep=";",header=F)[-1,-1]
-differentiation[upper.tri(differentiation)] <- t(differentiation)[upper.tri(differentiation)]
+genetic.coords <- read.csv(genetic.coords.file,sep=";",dec=",")[,2:3]
+genetic.coords.names <- read.csv(genetic.coords.file,sep=";",dec=",",stringsAsFactors = F)[,1]
+differentiation <- read.csv(genetic.diff.file,sep=";",header=F,dec=",",stringsAsFactors = F)
+differentiation2 <- read.csv(genetic.diff.file2,sep=";",header=F,dec=",",stringsAsFactors = F)
+differentiation3 <- read.csv(genetic.diff.file3,sep=";",header=F,dec=",",stringsAsFactors = F)
+differentiation3[is.na(differentiation3)] <- 0
 
 nrow(genetic.coords)
 nrow(differentiation)
 
 ## ---------------------------------------------------------
 
-coordinates(genetic.coords) <- ~Lon+Lat
-crs(genetic.coords) <- CRS("+proj=longlat +datum=WGS84")
-summary(genetic.coords)
+#coordinates(genetic.coords) <- ~Lon+Lat
+#crs(genetic.coords) <- CRS("+proj=longlat +datum=WGS84")
+#summary(genetic.coords)
  
-genetic.coords <- spTransform(genetic.coords, crs(polar.1))
-summary(genetic.coords)
-genetic.coords <- as.data.frame(genetic.coords)
+#genetic.coords <- spTransform(genetic.coords, crs(polar.1))
+#summary(genetic.coords)
+#genetic.coords <- as.data.frame(genetic.coords)
 
 ## ---------------------------------------------------------
 
@@ -166,6 +171,8 @@ unique.sites <- unique(sites)
 if( length(sites) != length(unique.sites) )  {
   
   differentiation.i <- matrix(NA,ncol=length(unique.sites),nrow=length(unique.sites))
+  differentiation.i2 <- matrix(NA,ncol=length(unique.sites),nrow=length(unique.sites))
+  differentiation.i3 <- matrix(NA,ncol=length(unique.sites),nrow=length(unique.sites))
   
   for( i in 1:length(unique.sites)) {
     for( j in 1:length(unique.sites)) {
@@ -174,24 +181,30 @@ if( length(sites) != length(unique.sites) )  {
       pairs.j <- which( sites == unique.sites[j]  )
       
       differentiation.i[i,j] <- mean(unlist(differentiation[pairs.i,pairs.j]),na.rm=T)
+      differentiation.i2[i,j] <- mean(unlist(differentiation2[pairs.i,pairs.j]),na.rm=T)
+      differentiation.i3[i,j] <- mean(unlist(differentiation3[pairs.i,pairs.j]),na.rm=T)
       
     }  }
 
   genetic.coords <- genetic.coords[-which(duplicated(sites)),]
-  genetic.coords.names <- genetic.coords.names[-which(duplicated(sites)),]
+  genetic.coords.names <- genetic.coords.names[-which(duplicated(sites))]
   differentiation <- differentiation.i
+  differentiation2 <- differentiation.i2
+  differentiation3 <- differentiation.i3
   
 }
 
 diag(differentiation) <- NA
+diag(differentiation2) <- NA
+diag(differentiation3) <- NA
 
 plot(cost.surface,col=c("white","#75C2D3"))
-points(genetic.coords[c(4,22),],col="#565656",pch=19)
-lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[1,]) , as.matrix(genetic.coords[2,]) , output="SpatialLines") )
+points(genetic.coords[c(4,27),],col="#565656",pch=19)
+lines( shortestPath(Conductance.distance, as.matrix(genetic.coords[4,]) , as.matrix(genetic.coords[27,]) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
-points(genetic.coords[c(4,22),],col="#565656",pch=19)
-lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[4,]) , as.matrix(genetic.coords[22,]) , output="SpatialLines") )
+points(genetic.coords[c(4,27),],col="#565656",pch=19)
+lines( shortestPath(Conductance.mean.active, as.matrix(genetic.coords[4,]) , as.matrix(genetic.coords[27,]) , output="SpatialLines") )
 
 plot(cost.surface,col=c("white","#75C2D3"))
 points(genetic.coords[c(4,22),],col="#565656",pch=19)
@@ -210,6 +223,32 @@ registerDoParallel(cl.2)
 results.diff <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
   
 return( as.numeric( differentiation[comb.all[i,1],comb.all[i,2]] ) )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
+
+## ---------------
+
+cl.2 <- makeCluster(number.cores)
+registerDoParallel(cl.2)
+
+results.diff2 <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+  
+  return( as.numeric( differentiation2[comb.all[i,1],comb.all[i,2]] ) )
+  
+}
+
+stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
+
+## ---------------
+
+cl.2 <- makeCluster(number.cores)
+registerDoParallel(cl.2)
+
+results.diff3 <- foreach(i=1:nrow(comb.all), .combine=c , .verbose=FALSE, .packages=c("gdistance","raster","data.table","reshape2")) %dopar% {
+  
+  return( as.numeric( differentiation3[comb.all[i,1],comb.all[i,2]] ) )
   
 }
 
@@ -287,6 +326,16 @@ stopCluster(cl.2) ; rm(cl.2) ; gc(reset=TRUE)
 rocky <- "/Volumes/Jellyfish/Dropbox/Manuscripts/Genetic differentiation of Laminaria digitata across Brittany/Data/Rocky.tif"
 rocky <- raster(rocky)
 
+bathymetryHD <- raster("/Volumes/Bathyscaphe/Bio-ORACLE/Spatial Data/Netcdf/GEBCO_2019.nc")
+bathymetryHD <- crop(bathymetryHD,rocky)
+bathymetryHD <- resample(bathymetryHD,rocky)
+
+bathymetryHDReclass <- bathymetryHD
+bathymetryHDReclass[bathymetryHDReclass < 2 ] <- NA
+bathymetryHDReclass[bathymetryHDReclass >= 2 ] <- 1
+
+rocky <- mask(rocky,bathymetryHDReclass)
+
 cl.2 <- makeCluster(number.cores)
 registerDoParallel(cl.2)
 
@@ -308,8 +357,12 @@ results <- data.frame(comb.all,
                       thermalDistance.passive=results.thermalDistance.passive,
                       currentsDistance.active=results.currentsDistance.active,
                       currentsDistance.passive=results.currentsDistance.passive,
-                      habitatContinuity = habitat.continuity,
-                      diff=results.diff)
+                      habitat.continuity.2 = habitat.continuity.2,
+                      habitat.continuity.5 = habitat.continuity.5,
+                      habitat.continuity.10 = habitat.continuity.10,
+                      diff=results.diff,
+                      diff2=results.diff2,
+                      diff3=results.diff3)
 
 results[results == Inf] <- NA
 head(results)
@@ -317,7 +370,7 @@ head(results)
 results[,1] <- genetic.coords.names[results[,1]]
 results[,2] <- genetic.coords.names[results[,2]]
 
-write.csv(results,file="../Metrix2.csv",quote = FALSE,row.names = FALSE)
+write.csv(results,file="../Final_Matrix.csv",quote = FALSE,row.names = FALSE)
 
 ## ----------------
 
@@ -334,8 +387,15 @@ for( i in 1:nrow(norm)) {
   results.final <- rbind(results.final,
                               data.frame(from=norm[i,1],
                                          to=norm[i,2],
-                                         Differantiation = as.numeric(as.character(results$diff[t.1])),
+                                         FST = as.numeric(as.character(results$diff[t.1])),
+                                         NEI = as.numeric(as.character(results$diff2[t.1])),
+                                         MIGRA = as.numeric(as.character(results$diff3[t.1])),
+                                         
                                          Distance = results$geoDistance[t.1],
+
+                                         habitatContinuity.2m = results$habitat.continuity.2[t.1],
+                                         habitatContinuity.5m = results$habitat.continuity.5[t.1],
+                                         habitatContinuity.10m = results$habitat.continuity.10[t.1],
                                          
                                          Connectivity.min.passive = min(c(results$currentsDistance.passive[t.1],results$currentsDistance.passive[t.2]),na.rm=T) ,
                                          Connectivity.mean.passive = mean(c(results$currentsDistance.passive[t.1],results$currentsDistance.passive[t.2]),na.rm=T) ,
@@ -359,22 +419,27 @@ for( i in 1:nrow(norm)) {
 
 ## ---------------
 
-results.final[,3] <- results.final [,3] / (1 - results.final [,3])
+# results.final[,3] <- results.final [,3] / (1 - results.final [,3])
+
 results.final[results.final[,3] < 0,3] <- 0
+results.final[results.final[,4] < 0,4] <- 0
+
+results.final <- results.final[,c(1:9,16,20)]
+colnames(results.final) <- c("pairFrom","pairTo","Fst","Nei","Migrate","marineDistance","habitatContinuity2","habitatContinuity5","habitatContinuity10","currentsDistance","thermalDistance")
 
 results.final <- results.final[complete.cases(results.final),]
 
-results.final[,5] <- sqrt(results.final [,5])
-results.final[,6] <- sqrt(results.final[,6] )
-results.final[,7] <- sqrt(results.final[,7] )
+#results.final[,5] <- sqrt(results.final [,5])
+#results.final[,6] <- sqrt(results.final[,6] )
+#results.final[,7] <- sqrt(results.final[,7] )
 
-fit.ibd <- lm(Differantiation ~ Distance, data=results.final , na.action = na.omit)
-fit.min.active <- lm(Differantiation ~ Connectivity.min, data=results.final , na.action = na.omit)
-fit.mean.active <- lm(Differantiation ~ Connectivity.mean, data=results.final , na.action = na.omit)
-fit.max.active <- lm(Differantiation ~ Connectivity.max, data=results.final , na.action = na.omit)
-fit.thermal.min <- lm(Differantiation ~ thermalDistance.min, data=results.final , na.action = na.omit)
-fit.thermal.mean <- lm(Differantiation ~ thermalDistance.mean, data=results.final , na.action = na.omit)
-fit.thermal.max <- lm(Differantiation ~ thermalDistance.max, data=results.final , na.action = na.omit)
+fit.ibd <- lm(FST ~ Distance, data=results.final , na.action = na.omit)
+fit.min.active <- lm(FST ~ Connectivity.min.active, data=results.final , na.action = na.omit)
+fit.mean.active <- lm(FST ~ Connectivity.mean.active, data=results.final , na.action = na.omit)
+fit.max.active <- lm(FST ~ Connectivity.max.active, data=results.final , na.action = na.omit)
+fit.thermal.min <- lm(FST ~ thermalDistance.min.active, data=results.final , na.action = na.omit)
+fit.thermal.mean <- lm(FST ~ thermalDistance.mean.active, data=results.final , na.action = na.omit)
+fit.thermal.max <- lm(FST ~ thermalDistance.max.active, data=results.final , na.action = na.omit)
 
 data.frame(aic.ibd= AIC(fit.ibd),
            r2.fit.ibd = summary(fit.ibd)$adj.r.squared,
@@ -415,13 +480,20 @@ lines(seq(from=min(results.final$thermalDistance,na.rm=T),to=max(results.final$t
 
 ## ---------------
 
-fit.mix <- lm(Differantiation ~ thermalDistance.mean+Connectivity.mean+Distance, data=results.final)
-step(fit.mix, direction = c("both"))
+# write.csv(results.final,file="../Final_Pairs_Matrix3.csv",quote = FALSE,row.names = FALSE)
 
-fit.final <- lm(Differantiation ~ Connectivity.min+thermalDistance, data=results.final)
+# save.image(file='myEnvironment.RData')
+# load('myEnvironment.RData')
+
+fit.mix <- lm(FST ~ habitatContinuity.5m+thermalDistance.mean.active+Connectivity.mean.active+Distance, data=results.final)
+st <- step(fit.mix, direction = c("both"))
+summary(st)
+
+fit.final <- lm(FST ~ thermalDistance.mean.active+habitatContinuity.5m+Connectivity.mean.active, data=results.final)
 AIC(fit.final)
 summary(fit.final)
-cor(results.final$Differantiation ,predict(fit.final))
+cor(results.final$FST ,predict(fit.final))
+plot(results.final$FST ,predict(fit.final))
 
 ## ---------------
 
